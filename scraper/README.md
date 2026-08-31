@@ -10,6 +10,7 @@ prohibit bulk data harvesting in their Terms of Service.
 | `scrape_kbsa.py` | kbsa.org.uk member directory | Company name, phone, address, website | Public directory published for exactly this purpose; be a polite, rate-limited crawler |
 | `companies_house_search.py` | Companies House API | Verified company name, registered address, SIC code, incorporation date | Official free UK government API |
 | `google_places_search.py` | Google Places API | Company name, phone, address, rating, review count/snippets | Official paid Google API (replaces scraping Google Maps, which is ToS-prohibited and actively blocked) |
+| `merge_leads.py` | the three CSVs above | One de-duplicated master list, phone/name-matched, with a `sources` column | n/a - just merges your own output |
 
 None of this ran inside the Claude session that generated it — this sandbox's
 network policy blocks outbound requests to arbitrary websites, so these
@@ -30,17 +31,26 @@ pip install -r requirements.txt
 python scrape_kbsa.py --out output/kbsa_leads.csv
 
 # Companies House (free API key: https://developer.company-information.service.gov.uk/)
+# Default --sic already covers the 8 kitchen/bathroom-relevant codes (see script docstring)
 export COMPANIES_HOUSE_API_KEY=your_key
-python companies_house_search.py --sic 43320,43221,47599 --out output/companies_house.csv
+python companies_house_search.py --out output/companies_house.csv
 
 # Google Places (paid API beyond free monthly credit: console.cloud.google.com)
 export GOOGLE_PLACES_API_KEY=your_key
-python google_places_search.py --towns-file uk_towns.txt --trade "kitchen fitters" --out output/google_kitchen_leads.csv
-python google_places_search.py --towns-file uk_towns.txt --trade "bathroom fitters" --out output/google_bathroom_leads.csv
+# trades.txt has 10 trade phrases (kitchen fitters, bathroom showroom, wet room installers, ...)
+# uk_towns.txt has 30 UK towns - this combination is 300 API calls, so start smaller if testing
+python google_places_search.py --towns-file uk_towns.txt --trades-file trades.txt --out output/google_leads.csv
+
+# Merge everything into one de-duplicated master list
+python merge_leads.py output/*.csv --out output/master_leads.csv --phone-only
 ```
 
-Merge/de-duplicate the resulting CSVs (by phone number and normalized
-company name) however suits your CRM import.
+`merge_leads.py` de-dupes by normalized phone number (falling back to
+normalized company name when a row has no phone), merges non-empty fields
+across sources, and records which file(s) each lead came from in a
+`sources` column - useful to prioritize leads confirmed by more than one
+source. `--phone-only` drops rows with no phone number, since this list is
+for cold calling.
 
 ## Before you cold call: UK compliance basics
 

@@ -20,11 +20,16 @@ Setup:
 Usage:
     python google_places_search.py --query "kitchen fitters in Manchester" --out output/google_leads.csv
     python google_places_search.py --towns-file uk_towns.txt --trade "bathroom fitters" --out output/google_leads.csv
+    python google_places_search.py --towns-file uk_towns.txt --trades-file trades.txt --out output/google_leads.csv
 
 Notes:
     - Text Search returns up to 20 results per query (no scrolling infinite
       results the way the Maps website does), so for real coverage you loop
-      over towns/postcodes/trades as separate queries (see --towns-file).
+      over towns/postcodes/trades as separate queries (see --towns-file and
+      --trades-file, which combine as every town x every trade phrase).
+    - --trades-file makes many more API calls (towns x trades) - mind the
+      Places API billing (see setup notes above) before running it against
+      the full uk_towns.txt list.
     - Respect people's opt-outs: screen numbers against the Corporate TPS
       (https://www.ctps.info) before cold-calling. See README.md.
 """
@@ -106,9 +111,13 @@ def main():
     ap.add_argument("--query", help='Single search query, e.g. "bathroom fitters in Leeds"')
     ap.add_argument(
         "--towns-file",
-        help="Text file, one UK town/postcode area per line, combined with --trade",
+        help="Text file, one UK town/postcode area per line, combined with --trade or --trades-file",
     )
-    ap.add_argument("--trade", default="kitchen and bathroom fitters", help="Trade phrase used with --towns-file")
+    ap.add_argument("--trade", default="kitchen and bathroom fitters", help="Single trade phrase used with --towns-file")
+    ap.add_argument(
+        "--trades-file",
+        help="Text file, one trade phrase per line (e.g. trades.txt) - combined with --towns-file as every town x every trade",
+    )
     ap.add_argument("--out", default="output/google_leads.csv")
     ap.add_argument("--delay", type=float, default=0.2)
     args = ap.parse_args()
@@ -123,10 +132,17 @@ def main():
         queries.append(args.query)
     if args.towns_file:
         with open(args.towns_file, encoding="utf-8") as f:
-            for line in f:
-                town = line.strip()
-                if town:
-                    queries.append(f"{args.trade} in {town}")
+            towns = [line.strip() for line in f if line.strip()]
+
+        if args.trades_file:
+            with open(args.trades_file, encoding="utf-8") as f:
+                trades = [line.strip() for line in f if line.strip()]
+        else:
+            trades = [args.trade]
+
+        for town in towns:
+            for trade in trades:
+                queries.append(f"{trade} in {town}")
     if not queries:
         print("Provide --query or --towns-file", file=sys.stderr)
         sys.exit(1)
